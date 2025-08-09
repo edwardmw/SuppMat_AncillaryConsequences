@@ -1626,7 +1626,8 @@ fishlabtime_hh_BL(h)     = fishlabtime_hh.l(h) ;
 fishlabtime_BL           = fishlabtime.l ;
 
 
-extime_hh_bl(h)             = (fishlabtime_hh_BL(h)*1.25)$fishlabtime_hh_BL(h) + 1$(not fishlabtime_hh_BL(h)) ;
+*extime_hh_bl(h)             = (fishlabtime_hh_BL(h)*1.25)$fishlabtime_hh_BL(h) + 1$(not fishlabtime_hh_BL(h)) ;
+extime_hh_bl(h)             = 1 ;
 
 Infectrate_hh_BL(h)             = Infectrate_hh.l(h) ;
 infectrate_BL = sum(h,infectrate_hh_BL(h)*shhh(h)) ;
@@ -1801,7 +1802,7 @@ fishlabtime_ts(t) = fishlabtime.l ;
 lnagg_ts(t) = log(ttqp_ts(t)*1000000/sum(h,xlnhh(h)*xlhhsize(h))) ;
 beta_ts(t) = beta.l ;
 gamma_ts(t) = gamma.l ;
-extime_ratio_hh_ts(h,t) = (0.2 + fishlabtime_hh.l(h)/extime_hh_bl(h))$fishlabtime_hh_ts(h,t) + 1$(not fishlabtime_hh_ts(h,t)) ;
+extime_ratio_hh_ts(h,t) = (1 + (fishlabtime_hh.l(h)-fishlabtime_hh_BL(h))/fishlabtime_hh_BL(h))$fishlabtime_hh_ts(h,t) + 1$(not fishlabtime_hh_ts(h,t)) ;
 
 *update mdaeffcov annually if running MDA shock. base of 0.295 provides a 19% reduction in I_h (King 2020)
 mdaeffcov$(MDAshock = 1) = gamma_bl*0.295**(1/tt);
@@ -1838,5 +1839,13 @@ tt = tt+1 ;
 ***TIME LOOP ENDS HERE
 display "THIS IS THE END OF THE TIME LOOP" ;
 );
+
+display fd_bl, fd_ts, fixfac_bl, fixfac_ts, bigr0_bl, bigr0_ts,
+         infectrate_hh_bl, infectrate_hh_ts, infectrate_bl,
+         fishlabtime_bl, fishlabtime_ts, fishlabtime_hh_bl, fishlabtime_hh_ts,
+         ttqp_bl, tqp_ts, ttqp_ts, ry_bl, ry_ts,
+         beta_bl, beta_ts, gamma_bl, gamma_ts, vareps_hh, ystate_bl, ystate_ts,
+         sigma_scalar, efflabsup_bl, efflabsup_ts, p_ts, P_composite_ts, x_ts, idsh_fish_record_ts ;
+
 
 execute_unload "EEL-output.gdx" ;
