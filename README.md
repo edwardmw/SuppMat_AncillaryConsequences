@@ -1,0 +1,1 @@
+The files required for replicating the main results presented in Ancillary Consequences of Policy Interventions in the Presence of Disease-Based Poverty Traps: Evidence from Uganda. Produced using GAMS v24.1.3.
