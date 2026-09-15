@@ -1922,10 +1922,6 @@ discount_fac(t) = [ 1 / (1 + discount_rate) ]**discount_fac_exp(t);
 npv_ry(h) = sum(t, (ry_ts(h,t) / hhpop(h)) * discount_fac(t))
            - sum(t, (ry_ts(h,"0") / hhpop(h)) * discount_fac(t));
 
-* 4. Calculate Static Per-Capita NPV (No dynamics)
-npv_ry_nodyn(h) = sum(t, (ry_ts(h,"1") / hhpop(h)) * discount_fac(t))
-                 - sum(t, (ry_ts(h,"0") / hhpop(h)) * discount_fac(t));
-
 * 5. Cumulative Per-Capita NPV Time Series
 * Ensure tt is aliased to t: alias(t, tt);
 Parameter npv_ry_ts(h,t) "Cumulative per-capita NPV of household income up to year t";
@@ -1933,45 +1929,12 @@ Parameter npv_ry_ts(h,t) "Cumulative per-capita NPV of household income up to ye
 npv_ry_ts(h,t) = sum(tt$(ord(tt) <= ord(t)), (ry_ts(h,tt) / hhpop(h)) * discount_fac(tt))
                  - sum(tt$(ord(tt) <= ord(t)), (ry_ts(h,"0") / hhpop(h)) * discount_fac(tt));
 
-$ontext
-*Start by setting the discount_fac_exp to 0 so that in t = 1 it equals zero:
-discount_fac_exp(t) = 0;
-*Make exponents:
-loop(t, discount_fac_exp(t+1) = 1 + discount_fac_exp(t));
-*Discout rate:
-discount_rate = 0.05;
-*Make discount factor:
-discount_fac(t) = [ 1/(1+discount_rate) ]**(discount_fac_exp(t));
-display discount_fac_exp, discount_fac ;
-*Create the discounted sum (in USD and in per capita terms):
-*for each household
-npv_ry(h) = sum( t, ry_ts(h,t)/discount_fac(t))
-                  - sum( t, ry_ts(h,"0")/discount_fac(t));
-*Create the discounted sum USING income in t=1
-*(i.e., static model with no bio or epi dynamics):
-npv_ry_nodyn(h) = sum( t, ry_ts(h,"1")/discount_fac(t))
-                  - sum( t, ry_ts(h,"0")/discount_fac(t));
-
-Parameter npv_ry_ts(h,t) "Cumulative NPV of household income up to year t";
-
-* Calculate the cumulative NPV for each year t
-npv_ry_ts(h,t) = sum(tt$(ord(tt) <= ord(t)), ry_ts(h,tt) / discount_fac(tt))
-                 - sum(tt$(ord(tt) <= ord(t)), ry_ts(h,"0") / discount_fac(tt));
-
-$offtext
 
 display discount_fac_exp, discount_rate, discount_fac, npv_ry, ry_ts, npv_ry_nodyn ;
 
 *==============================================================================
 *=== Reporting parameters for outcomes shown in the manuscript and SI =======
 *==============================================================================
-*The full derivation of every reporting parameter (diffs and percent changes
-*for every GE variable) lives in 08_Output_Params_se.gms, kept internal. This
-*is the subset that feeds the published tables and figures specifically:
-*R0 (bigr0), Infection Prevalence (infectrate_hh), Fishing Labour Time
-*(fishlabtime), Aggregate Output (ttqp), Fish Stock (x_frac_of_K), Harvest
-*(harvestkg), and Household Income (ry).
-
 **Differences from baseline
 ttqp_d(t)$ttqp_ts("0")=ttqp_ts(t)-ttqp_ts("0") ;
 ry_d(h,t)$ry_ts(h,"0")=ry_ts(h,t)-ry_ts(h,"0") ;
