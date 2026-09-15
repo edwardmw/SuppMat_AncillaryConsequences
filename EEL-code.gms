@@ -1919,19 +1919,19 @@ discount_rate = 0.05;
 discount_fac(t) = [ 1 / (1 + discount_rate) ]**discount_fac_exp(t);
 
 * 3. Calculate Per-Capita NPV (Total over T years)
-npv_ry(h) = sum(t, (ry_ts(h,t) / hhpop(h)) / discount_fac(t))
-           - sum(t, (ry_ts(h,"0") / hhpop(h)) / discount_fac(t));
+npv_ry(h) = sum(t, (ry_ts(h,t) / hhpop(h)) * discount_fac(t))
+           - sum(t, (ry_ts(h,"0") / hhpop(h)) * discount_fac(t));
 
 * 4. Calculate Static Per-Capita NPV (No dynamics)
-npv_ry_nodyn(h) = sum(t, (ry_ts(h,"1") / hhpop(h)) / discount_fac(t))
-                 - sum(t, (ry_ts(h,"0") / hhpop(h)) / discount_fac(t));
+npv_ry_nodyn(h) = sum(t, (ry_ts(h,"1") / hhpop(h)) * discount_fac(t))
+                 - sum(t, (ry_ts(h,"0") / hhpop(h)) * discount_fac(t));
 
 * 5. Cumulative Per-Capita NPV Time Series
 * Ensure tt is aliased to t: alias(t, tt);
 Parameter npv_ry_ts(h,t) "Cumulative per-capita NPV of household income up to year t";
 
-npv_ry_ts(h,t) = sum(tt$(ord(tt) <= ord(t)), (ry_ts(h,tt) / hhpop(h)) / discount_fac(tt))
-                 - sum(tt$(ord(tt) <= ord(t)), (ry_ts(h,"0") / hhpop(h)) / discount_fac(tt));
+npv_ry_ts(h,t) = sum(tt$(ord(tt) <= ord(t)), (ry_ts(h,tt) / hhpop(h)) * discount_fac(tt))
+                 - sum(tt$(ord(tt) <= ord(t)), (ry_ts(h,"0") / hhpop(h)) * discount_fac(tt));
 
 $ontext
 *Start by setting the discount_fac_exp to 0 so that in t = 1 it equals zero:
