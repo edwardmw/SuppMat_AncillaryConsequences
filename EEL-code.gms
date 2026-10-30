@@ -33,12 +33,57 @@ $if not set RoWtrade  $setglobal RoWtrade  0
 $if not set SI_LabElas1    $setglobal SI_LabElas1    0
 $if not set SI_LabElasINF  $setglobal SI_LabElasINF  0
 
+*SI appendix: lagged infection burden in effective labour (off by default).
+*SI_Lag: the infection burden that enters effective labour adjusts only
+*partially toward the equilibrium prevalence each year, at rate lagLambda
+*(1 = no lag, which reproduces the main-text model). The rule is skipped
+*whenever MDAshock = 1, since MDA clears adult worms directly.
+*lagtag is the label appended to output filenames (for example 025 for 0.25).
+$if not set SI_Lag     $setglobal SI_Lag     0
+$if not set lagLambda  $setglobal lagLambda  1
+$if not set lagtag     $setglobal lagtag     ""
+
+*SI appendix: net migration into fishing households (off by default). Migration
+*scales the population of household types through popidx(h) (1 = baseline
+*population). Migrants bring labour only, so each household type's capital and
+*land are shared among more members as the population grows.
+*SI_Mig: 1 activates. Each year the population index of the two fishing household
+*types is multiplied by (signal ratio)^migEta, where the signal ratio is the
+*population-weighted average of fishing household income per capita relative to
+*its baseline value. migEta is the annual elasticity of the fishing population
+*with respect to that signal. migtag is the label appended to output filenames.
+$if not set SI_Mig    $setglobal SI_Mig    0
+$if not set migEta    $setglobal migEta    0.05
+$if not set migtag    $setglobal migtag    ""
+*migAll: 1 applies the rule to all four household types, each responding to its
+*own income per capita relative to its own baseline value (default 0 is the
+*fishing-only rule described above).
+$if not set migAll    $setglobal migAll    0
+*Channel switches for the migration specification. Each describes how population
+*enters the epidemiological side. migExpPC: 1 divides each household's fishing
+*labour time by its population index inside the exposure ratio (exposure per
+*member), 0 (default) uses the specified ratio of household fishing hours to
+*baseline. migShares: 1 (default) recomputes population shares each year from the
+*index, 0 holds them at baseline. migBG: 1 (default) lets population enter the
+*per-capita output that drives beta and gamma, 0 holds it at baseline.
+$if not set migExpPC  $setglobal migExpPC  0
+$if not set migShares $setglobal migShares 1
+$if not set migBG     $setglobal migBG     1
+
 *Define Shock parameters (equal to zero by default)
 parameter MDAshock equal to 1 if simulating MDA shock  / %MDAshock% /
           FMPshock equal to 1 if simulating FMP shock  / %FMPshock% /
           TFPshock equal to 1 if simulating TFP shock  / %TFPshock% /
           SI_LabElas1 equal to 1 if using SI labor elasticity = 1 specification / %SI_LabElas1% /
           SI_LabElasINF equal to 1 if using SI labor elasticity declining-in-infection specification / %SI_LabElasINF% /
+          SI_Lag equal to 1 if using SI lagged infection burden specification / %SI_Lag% /
+          lagLambda share of the gap between burden and equilibrium prevalence closed each year (SI_Lag) / %lagLambda% /
+          SI_Mig equal to 1 if using SI migration specification / %SI_Mig% /
+          migEta annual elasticity of the population with respect to income per capita / %migEta% /
+          migAll equal to 1 if the migration rule applies to all household types / %migAll% /
+          migExpPC equal to 1 if exposure is divided by the population index / %migExpPC% /
+          migShares equal to 1 if population shares are updated yearly / %migShares% /
+          migBG equal to 1 if per-capita output in beta and gamma uses the population index / %migBG% /
 ;
 
 *============================================================================================
@@ -75,6 +120,18 @@ $endif
 
 $ifthen %SI_LabElasINF% == 1
 $setglobal shock_id "%shock_id%_LabElasINF"
+$endif
+
+$setglobal outdir "output"
+
+$ifthen %SI_Lag% == 1
+$setglobal shock_id "%shock_id%_Lag%lagtag%"
+$setglobal outdir "output_SI_Lag"
+$endif
+
+$ifthen %SI_Mig% == 1
+$setglobal shock_id "%shock_id%_Mig%migtag%"
+$setglobal outdir "output_SI_Migration"
 $endif
 
 $ifthen %RoWtrade% == 1
@@ -436,6 +493,16 @@ parameters
      hfsupel(f,h)        factor supply elasticity from household
      hfsupel_ts(f,h,t)   factor supply elasticity actually used in period t (SI_LabElasINF tracking)
      agg_infectrate_sims_ts(t)  population-weighted aggregate infection rate entering period t's labor supply decision (SI_LabElasINF tracking)
+     lag_burden(h)       infection burden carried into the next period's effective labour (SI_Lag state)
+     lag_burden_ts(h,t)  infection burden carried out of period t (equals equilibrium prevalence unless SI_Lag is active)
+     popidx(h)           population index of household type h in the current period with baseline equal to 1 (SI_Mig)
+     popidx_ts(h,t)      population index of household type h in period t (SI_Mig)
+     shhh_t(h)           population share of household type h in the current period (equals shhh unless SI_Mig is active)
+     poptot              total population in the current period (equals baseline total unless SI_Mig is active)
+     migsig              migration signal ratio relative to baseline (SI_Mig)
+     migsig_ts(t)        migration signal ratio in period t (SI_Mig)
+     migsig_h(h)         migration signal ratio of household type h (SI_Mig with migAll)
+     migsig_h_ts(h,t)    migration signal ratio of household type h in period t (SI_Mig with migAll)
      labtime_bl(f,h)     Baseline labor time supplied by the household (PARAMETER IS FOR SIMS MODEL ONLY... assigned values from BL Solve)
 
 * Budget for purchased inputs - if we want to have a constraint
@@ -747,7 +814,7 @@ EQ_LABTIME_BL(ft,h)..
 EQ_HFSUP_SIMS(ft,h)..
      HFSUP(ft,h)$(not hfsupzero(ft,h))
         +
-     (HFSUP(ft,h)/(labtime_bl(ft,h)*(1-Infectrate_hh_sims(h)*alpha))  - [sum(v$maphv(h,v),WV(ft)**hfsupel(ft,h))$ftv(ft) + (WV(ft)**hfsupel(ft,h))$(ftw(ft))] )$hfsupzero(ft,h)
+     (HFSUP(ft,h)/(labtime_bl(ft,h)*popidx(h)*(1-Infectrate_hh_sims(h)*alpha))  - [sum(v$maphv(h,v),WV(ft)**hfsupel(ft,h))$ftv(ft) + (WV(ft)**hfsupel(ft,h))$(ftw(ft))] )$hfsupzero(ft,h)
      =e= 0
 ;
 
@@ -804,10 +871,10 @@ EQ_Lfish_ts..
 fishlabtime =e= sum(h,fishlabtime_hh(h)) ;
 
 EQ_beta_ts..
-beta =e= (1 + exp((log(sum(g,sum(h,QP(g,h)))*1000000/sum(h,xlnhh(h)*xlhhsize(h)))-lnagg_med)/lnagg_s))**(-1)*(bmax-bmin) + bmin ;
+beta =e= (1 + exp((log(sum(g,sum(h,QP(g,h)))*1000000/poptot)-lnagg_med)/lnagg_s))**(-1)*(bmax-bmin) + bmin ;
 
 EQ_gamma_ts..
-gamma =e= (1 + exp(-(log(sum(g,sum(h,QP(g,h)))*1000000/sum(h,xlnhh(h)*xlhhsize(h)))-lnagg_med)/lnagg_s))**(-1)*(gmax-gmin) + gmin ;
+gamma =e= (1 + exp(-(log(sum(g,sum(h,QP(g,h)))*1000000/poptot)-lnagg_med)/lnagg_s))**(-1)*(gmax-gmin) + gmin ;
 
 
 *==============================================================================
@@ -820,7 +887,7 @@ EQ_infss_ts(h)..
 (gamma_ts_t + mdaeffcov)*Infectrate_hh_ts_t(h) =e= beta_ts_t*extime_ratio_t(h)*vareps_hh(h)*Ystate_ts_t*(1-Infectrate_hh_ts_t(h)) ;
 
 EQ_Yss_ts..
-Ystate_ts_t*mu =e= (1-Ystate_ts_t)*beta_ts_t*sum(h,shhh(h)*extime_ratio_t(h)*vareps_hh(h)*Infectrate_hh_ts_t(h)) ;
+Ystate_ts_t*mu =e= (1-Ystate_ts_t)*beta_ts_t*sum(h,shhh_t(h)*extime_ratio_t(h)*vareps_hh(h)*Infectrate_hh_ts_t(h)) ;
 
 Infectrate_hh_ts_t.lo(h) = 0 ;
 Infectrate_hh_ts_t.up(h) = 1 ;
@@ -1707,6 +1774,15 @@ lnagg_ts(t)                 = (sum(g,sum(h,QP.l(g,h)))*1000000/sum(h,xlnhh(h)*xl
 
 *Pass 1st period values for infectrate_hh to sims parameter in SIMS model
 Infectrate_hh_sims(h) = infectrate_hh_ts(h,"1") ;
+lag_burden(h) = Infectrate_hh_sims(h) ;
+
+*Population index and shares used by the SI migration specification. With
+*SI_Mig off, popidx stays at 1 and every population term below equals its
+*original static value.
+popidx(h) = 1 ;
+shhh_t(h) = shhh(h) ;
+poptot = sum(h,xlnhh(h)*xlhhsize(h)) ;
+migsig = 1 ;
 
 *calculate baseline R0
 bigr0_ts(t) = beta_ts("0")*beta_ts("0")*sum(h,shhh(h)*vareps_hh(h)**2)/(gamma_ts("0")*mu) ;
@@ -1736,6 +1812,13 @@ loop (t$(ord(t) > 1),
 *Adjust the idsh for the fishing sector to reflect how changes in stock size
 *affect input costs. Note this will just be the baseline value for the first solve.
 idsh(gstk,gg,h)= d_sc(gstk,gg,h)/ (stock(gstk)**n_sc);
+
+*SI appendix: population index in effect this period (set at the end of the
+*previous period when SI_Mig is active).
+shhh_t(h)$(migShares = 1) = xlnhh(h)*popidx(h) / sum(hh,xlnhh(hh)*popidx(hh)) ;
+shhh_t(h)$(migShares = 0) = shhh(h) ;
+poptot = sum(h,xlnhh(h)*xlhhsize(h)*(popidx(h)$(migBG = 1) + 1$(migBG = 0))) ;
+popidx_ts(h,t) = popidx(h) ;
 
 *SI appendix: labor elasticity declining in aggregate infection status.
 *hfsupel itself (used inside EQ_HFSUP_SIMS) can't be time-indexed there -- the
@@ -1806,7 +1889,7 @@ tidsh_ts(g,h,t)    = tidsh(g,h) ;
 qp_ts(g,h,t)       = QP.l(g,h) ;
 tqp_ts(g,t)        = sum(h,qp_ts(g,h,t)) ;
 ttqp_ts(t)         = sum(g,tqp_ts(g,t)) ;
-ttqp_percap_ts(t)  = ttqp_ts(t) / sum(h,xlnhh(h)*xlhhsize(h)) ;
+ttqp_percap_ts(t)  = ttqp_ts(t) / poptot ;
 hqp_ts(h,t)        = sum(g, qp_ts(g,h,t)) ;
 fixfac_ts(g,fk,h,t) = fixfac(g,fk,h) ;
 pva_ts(g,h,t)      = PVA.l(g,h) ;
@@ -1860,10 +1943,10 @@ idsh_fish_record_ts(gstk,gg,h,t)= idsh(gstk,gg,h) ;
 
 fishlabtime_hh_ts(h,t) = fishlabtime_hh.l(h) ;
 fishlabtime_ts(t) = fishlabtime.l ;
-lnagg_ts(t) = log(ttqp_ts(t)*1000000/sum(h,xlnhh(h)*xlhhsize(h))) ;
+lnagg_ts(t) = log(ttqp_ts(t)*1000000/poptot) ;
 beta_ts(t) = beta.l ;
 gamma_ts(t) = gamma.l ;
-extime_ratio_hh_ts(h,t) = (0.2 + fishlabtime_hh.l(h)/extime_hh_bl(h))$fishlabtime_hh_ts(h,t) + 1$(not fishlabtime_hh_ts(h,t)) ;
+extime_ratio_hh_ts(h,t) = (0.2 + fishlabtime_hh.l(h)/(extime_hh_bl(h)*(popidx(h)$(migExpPC = 1) + 1$(migExpPC = 0))))$fishlabtime_hh_ts(h,t) + 1$(not fishlabtime_hh_ts(h,t)) ;
 
 
 *==========================================
@@ -1873,7 +1956,7 @@ extime_ratio_hh_ts(h,t) = (0.2 + fishlabtime_hh.l(h)/extime_hh_bl(h))$fishlabtim
 mdaeffcov$(MDAshock = 1) = gamma_ts("0")*0.295**(1/(ord(t)-1));
 
 *Calculate R0
-bigr0_ts(t)      = beta_ts(t)*beta_ts(t)*sum(h,shhh(h)*extime_ratio_hh_ts(h,t)**2*vareps_hh(h)**2)/((mdaeffcov+gamma_ts(t))*mu) ;
+bigr0_ts(t)      = beta_ts(t)*beta_ts(t)*sum(h,shhh_t(h)*extime_ratio_hh_ts(h,t)**2*vareps_hh(h)**2)/((mdaeffcov+gamma_ts(t))*mu) ;
 
 
 *Solve the Quasi-SS model
@@ -1893,10 +1976,31 @@ bigr0_ts(t)      = beta_ts(t)*beta_ts(t)*sum(h,shhh(h)*extime_ratio_hh_ts(h,t)**
 
 *Now pass on values from the solution to the state variables in time t.
          infectrate_hh_ts(h,t) = Infectrate_hh_ts_t.l(h) ;
-         infectrate_ts(t) = sum(h,infectrate_hh_ts(h,t)*shhh(h)) ;
+         infectrate_ts(t) = sum(h,infectrate_hh_ts(h,t)*shhh_t(h)) ;
          ystate_ts(t) = Ystate_ts_t.l ;
-*Pass t-period values for infectrate_hh to sims parameter in SIMS model
-         Infectrate_hh_sims(h) = Infectrate_hh_ts_t.l(h) ;
+*Pass t-period values for infectrate_hh to sims parameter in SIMS model.
+*Under SI_Lag (and no MDA), the burden that enters next year's effective labour
+*adjusts only partially toward this year's equilibrium prevalence.
+         lag_burden(h)$(SI_Lag = 1 and MDAshock = 0) = lagLambda*Infectrate_hh_ts_t.l(h) + (1 - lagLambda)*lag_burden(h) ;
+         Infectrate_hh_sims(h)$(SI_Lag = 1 and MDAshock = 0) = lag_burden(h) ;
+         Infectrate_hh_sims(h)$(not (SI_Lag = 1 and MDAshock = 0)) = Infectrate_hh_ts_t.l(h) ;
+         lag_burden_ts(h,t) = Infectrate_hh_sims(h) ;
+
+*SI appendix: net migration into fishing households. The signal ratio is the
+*population-weighted average of fishing household income per capita relative to
+*its baseline value. The fishing population index is multiplied by
+*(signal ratio)^migEta, which takes effect next period.
+         migsig = 1 ;
+         migsig$(SI_Mig = 1) = sum(h$(sameas(h,"FishPoor") or sameas(h,"FishNpoor")), shhh_t(h)*(ry_ts(h,t)/popidx(h))/ry_ts(h,"0"))
+                               / sum(h$(sameas(h,"FishPoor") or sameas(h,"FishNpoor")), shhh_t(h)) ;
+         migsig_ts(t) = migsig ;
+         popidx(h)$(SI_Mig = 1 and migAll = 0 and (sameas(h,"FishPoor") or sameas(h,"FishNpoor"))) = popidx(h)*migsig**migEta ;
+
+*With migAll equal to 1 each household type responds to its own income per capita.
+         migsig_h(h) = 1 ;
+         migsig_h(h)$(SI_Mig = 1 and migAll = 1) = (ry_ts(h,t)/popidx(h))/ry_ts(h,"0") ;
+         migsig_h_ts(h,t) = migsig_h(h) ;
+         popidx(h)$(SI_Mig = 1 and migAll = 1) = popidx(h)*migsig_h(h)**migEta ;
 
 
 ***TIME LOOP ENDS HERE
@@ -1922,6 +2026,10 @@ discount_fac(t) = [ 1 / (1 + discount_rate) ]**discount_fac_exp(t);
 npv_ry(h) = sum(t, (ry_ts(h,t) / hhpop(h)) * discount_fac(t))
            - sum(t, (ry_ts(h,"0") / hhpop(h)) * discount_fac(t));
 
+* 4. Calculate Static Per-Capita NPV (No dynamics)
+npv_ry_nodyn(h) = sum(t, (ry_ts(h,"1") / hhpop(h)) * discount_fac(t))
+                 - sum(t, (ry_ts(h,"0") / hhpop(h)) * discount_fac(t));
+
 * 5. Cumulative Per-Capita NPV Time Series
 * Ensure tt is aliased to t: alias(t, tt);
 Parameter npv_ry_ts(h,t) "Cumulative per-capita NPV of household income up to year t";
@@ -1929,12 +2037,45 @@ Parameter npv_ry_ts(h,t) "Cumulative per-capita NPV of household income up to ye
 npv_ry_ts(h,t) = sum(tt$(ord(tt) <= ord(t)), (ry_ts(h,tt) / hhpop(h)) * discount_fac(tt))
                  - sum(tt$(ord(tt) <= ord(t)), (ry_ts(h,"0") / hhpop(h)) * discount_fac(tt));
 
+$ontext
+*Start by setting the discount_fac_exp to 0 so that in t = 1 it equals zero:
+discount_fac_exp(t) = 0;
+*Make exponents:
+loop(t, discount_fac_exp(t+1) = 1 + discount_fac_exp(t));
+*Discout rate:
+discount_rate = 0.05;
+*Make discount factor:
+discount_fac(t) = [ 1/(1+discount_rate) ]**(discount_fac_exp(t));
+display discount_fac_exp, discount_fac ;
+*Create the discounted sum (in USD and in per capita terms):
+*for each household
+npv_ry(h) = sum( t, ry_ts(h,t)/discount_fac(t))
+                  - sum( t, ry_ts(h,"0")/discount_fac(t));
+*Create the discounted sum USING income in t=1
+*(i.e., static model with no bio or epi dynamics):
+npv_ry_nodyn(h) = sum( t, ry_ts(h,"1")/discount_fac(t))
+                  - sum( t, ry_ts(h,"0")/discount_fac(t));
+
+Parameter npv_ry_ts(h,t) "Cumulative NPV of household income up to year t";
+
+* Calculate the cumulative NPV for each year t
+npv_ry_ts(h,t) = sum(tt$(ord(tt) <= ord(t)), ry_ts(h,tt) / discount_fac(tt))
+                 - sum(tt$(ord(tt) <= ord(t)), ry_ts(h,"0") / discount_fac(tt));
+
+$offtext
 
 display discount_fac_exp, discount_rate, discount_fac, npv_ry, ry_ts, npv_ry_nodyn ;
 
 *==============================================================================
 *=== Reporting parameters for outcomes shown in the manuscript and SI =======
 *==============================================================================
+*The full derivation of every reporting parameter (diffs and percent changes
+*for every GE variable) lives in 08_Output_Params_se.gms, kept internal. This
+*is the subset that feeds the published tables and figures specifically:
+*R0 (bigr0), Infection Prevalence (infectrate_hh), Fishing Labour Time
+*(fishlabtime), Aggregate Output (ttqp), Fish Stock (x_frac_of_K), Harvest
+*(harvestkg), and Household Income (ry).
+
 **Differences from baseline
 ttqp_d(t)$ttqp_ts("0")=ttqp_ts(t)-ttqp_ts("0") ;
 ry_d(h,t)$ry_ts(h,"0")=ry_ts(h,t)-ry_ts(h,"0") ;
@@ -1965,5 +2106,5 @@ harvestkg_pc(gstk,t)$(harvestkg_pc(gstk,t) = 0) = EPS ;
 x_frac_of_K_pc(t)$(x_frac_of_K_pc(t) = 0) = EPS ;
 
 $ifthen %sendresults% == 1
-execute_unload "./output/%trade%%shock_id%%rts%.gdx" ;
+execute_unload "./%outdir%/%trade%%shock_id%%rts%.gdx" ;
 $endif
